@@ -3,6 +3,8 @@
  * Parses MMF/SMAF format binary data used in mobile phone ringtones
  */
 
+const DEFAULT_NOTE_DURATION_MS = 250; // Default duration when note off events are not tracked
+
 export interface MMFNote {
   time: number;        // Time in milliseconds
   note: number;        // MIDI note number (0-127)
@@ -160,7 +162,7 @@ export class MMFParser {
         const channel = status & 0x0F;
         const note = this.readUInt8();
         const velocity = this.readUInt8();
-        // Note off event - we'll handle duration when we see note on
+        // Skip note off events - using default duration for simplicity
         continue;
       }
 
@@ -171,8 +173,8 @@ export class MMFParser {
         const velocity = this.readUInt8();
         
         if (velocity > 0) {
-          // Default duration if not specified
-          const duration = 250;
+          // Use default duration since note off tracking is not implemented
+          const duration = DEFAULT_NOTE_DURATION_MS;
           notes.push({
             time: currentTime,
             note,

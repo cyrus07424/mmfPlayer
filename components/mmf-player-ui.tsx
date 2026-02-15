@@ -5,7 +5,7 @@ import { parseMMF, MMFData } from '@/lib/mmf-parser';
 import { MMFPlayer, PlayerState } from '@/lib/mmf-player';
 
 export default function MMFPlayerUI() {
-  const [mmfData, setMMfData] = useState<MMFData | null>(null);
+  const [mmfData, setMMFData] = useState<MMFData | null>(null);
   const [fileName, setFileName] = useState<string>('');
   const [fileSize, setFileSize] = useState<number>(0);
   const [error, setError] = useState<string>('');
@@ -34,9 +34,9 @@ export default function MMFPlayerUI() {
     setError('');
     setProgress(0);
     
-    // Validate file
+    // Validate file extension
     if (!file.name.toLowerCase().endsWith('.mmf') && !file.name.toLowerCase().endsWith('.smaf')) {
-      setError('ファイルはMMF形式またはSMAF形式である必要があります');
+      setError('ファイルの拡張子は.mmfまたは.smafである必要があります');
       return;
     }
 
@@ -48,7 +48,7 @@ export default function MMFPlayerUI() {
 
       // Parse MMF data
       const data = parseMMF(arrayBuffer);
-      setMMfData(data);
+      setMMFData(data);
 
       // Load into player
       await playerRef.current?.load(data);
@@ -60,7 +60,7 @@ export default function MMFPlayerUI() {
     } catch (err) {
       console.error('Error parsing MMF file:', err);
       setError(err instanceof Error ? err.message : 'ファイルの解析に失敗しました');
-      setMMfData(null);
+      setMMFData(null);
     }
   }, [playerState]);
 

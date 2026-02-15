@@ -7,6 +7,9 @@ import { MMFData, MMFNote } from './mmf-parser';
 
 export type PlayerState = 'idle' | 'playing' | 'paused' | 'stopped';
 
+// Audio configuration constants
+const MAX_VOLUME_MULTIPLIER = 0.3; // Max volume to avoid clipping (30% of full volume)
+
 export interface PlayerOptions {
   onProgress?: (progress: number) => void;
   onStateChange?: (state: PlayerState) => void;
@@ -172,7 +175,7 @@ export class MMFPlayer {
       oscillator.type = 'square';
 
       // Set volume based on velocity
-      const volume = note.velocity / 127 * 0.3; // Max volume 0.3 to avoid clipping
+      const volume = note.velocity / 127 * MAX_VOLUME_MULTIPLIER;
       gainNode.gain.setValueAtTime(volume, startTime);
       
       // Add envelope (ADSR)
