@@ -48,12 +48,6 @@ export default function MMFPlayerUI() {
 
       // Parse MMF data
       const data = parseMMF(arrayBuffer);
-      console.log('Parsed MMF data:', JSON.stringify({
-        duration: data.duration,
-        tempo: data.tempo,
-        noteCount: data.notes.length,
-        metadata: data.metadata
-      }, null, 2));
       setMMFData(data);
 
       // Load into player
