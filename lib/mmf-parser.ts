@@ -62,14 +62,20 @@ export class MMFParser {
 
       switch (chunk.type) {
         case 'CNTI':
+        case 'OPDA':
+          // Parse content info and optional data chunks
           Object.assign(metadata, this.parseCNTI(chunk));
           break;
         case 'MTR ':
         case 'Mtr ':
-        case 'OPDA':
+          // Parse music track chunk
           const trackData = this.parseMTR(chunk);
           notes.push(...trackData.notes);
           if (trackData.tempo) tempo = trackData.tempo;
+          break;
+        case 'MSTR':
+          // Master track - skip for now (contains global tempo/timing)
+          this.position = chunk.offset + chunk.size;
           break;
         case 'Atsq':
         case 'ATR ':
