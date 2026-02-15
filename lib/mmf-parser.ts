@@ -4,6 +4,7 @@
  */
 
 const DEFAULT_NOTE_DURATION_MS = 250; // Default duration when note off events are not tracked
+const DEFAULT_TPQN = 24; // Default ticks per quarter note
 
 export interface MMFNote {
   time: number;        // Time in milliseconds
@@ -62,14 +63,20 @@ export class MMFParser {
 
       switch (chunk.type) {
         case 'CNTI':
+        case 'OPDA':
+          // Parse content info and optional data chunks
           Object.assign(metadata, this.parseCNTI(chunk));
           break;
         case 'MTR ':
         case 'Mtr ':
-        case 'OPDA':
+          // Parse music track chunk
           const trackData = this.parseMTR(chunk);
           notes.push(...trackData.notes);
           if (trackData.tempo) tempo = trackData.tempo;
+          break;
+        case 'MSTR':
+          // Master track - skip for now (contains global tempo/timing)
+          this.position = chunk.offset + chunk.size;
           break;
         case 'Atsq':
         case 'ATR ':
@@ -153,13 +160,36 @@ export class MMFParser {
     let currentTime = 0;
     let tempo: number | undefined;
 
-    // Skip to MIDI-like data
+    // Check if we have at least 5 bytes for MTR header
+    if (this.position + 5 > endPos) {
+      this.position = endPos;
+      return { notes, tempo };
+    }
+
+    // Parse MTR chunk header fields
+    // These fields define the format and timing for the sequence data
+    // Note: We read all header fields to advance the position correctly,
+    // even if not all fields are currently used
+    const formatType = this.readUInt8();     // Format type (e.g., Handyphone Standard, Mobile Standard)
+    const sequenceType = this.readUInt8();   // Sequence type (continuous or phrase-based)
+    const timeBaseD = this.readUInt8();      // Time base for duration (ticks per quarter note)
+    const timeBaseG = this.readUInt8();      // Time base for gate time
+    const channelStatus = this.readUInt8();  // Channel status byte
+
+    // Calculate time resolution in milliseconds
+    // TimeBase_D represents ticks per quarter note
+    // Default tempo is 120 BPM = 500ms per quarter note
+    const msPerQuarterNote = 500; // 120 BPM default
+    const tickDuration = timeBaseD > 0 ? msPerQuarterNote / timeBaseD : msPerQuarterNote / DEFAULT_TPQN;
+
+    // Parse sequence data
     while (this.position < endPos - 1) {
       const status = this.readUInt8();
 
       // Note off: 0x80-0x8F
       if (status >= 0x80 && status <= 0x8F) {
         const channel = status & 0x0F;
+        if (this.position + 2 > endPos) break;
         const note = this.readUInt8();
         const velocity = this.readUInt8();
         // Skip note off events - using default duration for simplicity
@@ -169,6 +199,7 @@ export class MMFParser {
       // Note on: 0x90-0x9F
       if (status >= 0x90 && status <= 0x9F) {
         const channel = status & 0x0F;
+        if (this.position + 2 > endPos) break;
         const note = this.readUInt8();
         const velocity = this.readUInt8();
         
@@ -188,29 +219,39 @@ export class MMFParser {
 
       // Tempo change: 0xFF 0x51 0x03
       if (status === 0xFF) {
+        if (this.position + 2 > endPos) break;
         const metaType = this.readUInt8();
         const length = this.readUInt8();
         
-        if (metaType === 0x51 && length === 3) {
+        if (metaType === 0x51 && length === 3 && this.position + 3 <= endPos) {
           const microsecondsPerBeat = this.readUInt24BE();
           tempo = Math.round(60000000 / microsecondsPerBeat);
         } else {
           // Skip meta event data
-          this.position += length;
+          if (this.position + length <= endPos) {
+            this.position += length;
+          } else {
+            break;
+          }
         }
         continue;
       }
 
       // Delta time (variable length)
       if (status < 0x80) {
-        currentTime += this.readVariableLength(status);
+        const deltaTime = this.readVariableLength(status);
+        currentTime += deltaTime * tickDuration;
         continue;
       }
 
       // Control change, program change, etc - skip
       if (status >= 0xB0 && status <= 0xEF) {
         const dataBytes = status >= 0xC0 && status <= 0xDF ? 1 : 2;
-        this.position += dataBytes;
+        if (this.position + dataBytes <= endPos) {
+          this.position += dataBytes;
+        } else {
+          break;
+        }
         continue;
       }
 
