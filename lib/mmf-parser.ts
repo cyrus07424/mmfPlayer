@@ -153,13 +153,62 @@ export class MMFParser {
     let currentTime = 0;
     let tempo: number | undefined;
 
-    // Skip to MIDI-like data
+    // Parse MTR chunk header fields
+    // These fields define the format and timing for the sequence data
+    if (this.position >= endPos) {
+      this.position = endPos;
+      return { notes, tempo };
+    }
+
+    // Format Type (1 byte) - defines the format of sequence data
+    const formatType = this.readUInt8();
+    if (this.position >= endPos) {
+      this.position = endPos;
+      return { notes, tempo };
+    }
+
+    // Sequence Type (1 byte) - defines if continuous or phrase-based
+    const sequenceType = this.readUInt8();
+    if (this.position >= endPos) {
+      this.position = endPos;
+      return { notes, tempo };
+    }
+
+    // TimeBase_D (1 byte) - time base for duration
+    const timeBaseD = this.readUInt8();
+    if (this.position >= endPos) {
+      this.position = endPos;
+      return { notes, tempo };
+    }
+
+    // TimeBase_G (1 byte) - time base for gate time
+    const timeBaseG = this.readUInt8();
+    if (this.position >= endPos) {
+      this.position = endPos;
+      return { notes, tempo };
+    }
+
+    // Channel status (1 byte)
+    const channelStatus = this.readUInt8();
+    if (this.position >= endPos) {
+      this.position = endPos;
+      return { notes, tempo };
+    }
+
+    // Calculate time resolution in milliseconds
+    // TimeBase values represent ticks per quarter note
+    // Default tempo is 120 BPM = 500ms per quarter note
+    const msPerQuarterNote = 500; // 120 BPM default
+    const tickDuration = timeBaseD > 0 ? msPerQuarterNote / timeBaseD : 1;
+
+    // Parse sequence data
     while (this.position < endPos - 1) {
       const status = this.readUInt8();
 
       // Note off: 0x80-0x8F
       if (status >= 0x80 && status <= 0x8F) {
         const channel = status & 0x0F;
+        if (this.position + 2 > endPos) break;
         const note = this.readUInt8();
         const velocity = this.readUInt8();
         // Skip note off events - using default duration for simplicity
@@ -169,6 +218,7 @@ export class MMFParser {
       // Note on: 0x90-0x9F
       if (status >= 0x90 && status <= 0x9F) {
         const channel = status & 0x0F;
+        if (this.position + 2 > endPos) break;
         const note = this.readUInt8();
         const velocity = this.readUInt8();
         
@@ -188,29 +238,39 @@ export class MMFParser {
 
       // Tempo change: 0xFF 0x51 0x03
       if (status === 0xFF) {
+        if (this.position + 2 > endPos) break;
         const metaType = this.readUInt8();
         const length = this.readUInt8();
         
-        if (metaType === 0x51 && length === 3) {
+        if (metaType === 0x51 && length === 3 && this.position + 3 <= endPos) {
           const microsecondsPerBeat = this.readUInt24BE();
           tempo = Math.round(60000000 / microsecondsPerBeat);
         } else {
           // Skip meta event data
-          this.position += length;
+          if (this.position + length <= endPos) {
+            this.position += length;
+          } else {
+            break;
+          }
         }
         continue;
       }
 
       // Delta time (variable length)
       if (status < 0x80) {
-        currentTime += this.readVariableLength(status);
+        const deltaTime = this.readVariableLength(status);
+        currentTime += deltaTime * tickDuration;
         continue;
       }
 
       // Control change, program change, etc - skip
       if (status >= 0xB0 && status <= 0xEF) {
         const dataBytes = status >= 0xC0 && status <= 0xDF ? 1 : 2;
-        this.position += dataBytes;
+        if (this.position + dataBytes <= endPos) {
+          this.position += dataBytes;
+        } else {
+          break;
+        }
         continue;
       }
 
