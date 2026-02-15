@@ -55,35 +55,46 @@ export class MMFParser {
     const fileSize = this.readUInt32BE();
     
     // Parse chunks
+    console.log('Starting chunk parsing, position=', this.position);
     while (this.position < this.data.length - 8) {
       const chunk = this.readChunkHeader();
       
-      if (!chunk) break;
+      if (!chunk) {
+        console.log('readChunkHeader returned null, breaking');
+        break;
+      }
+
+      console.log(`Found chunk: type="${chunk.type}" (bytes: ${[...chunk.type].map(c => '0x'+c.charCodeAt(0).toString(16)).join(' ')}), size=${chunk.size}, offset=${chunk.offset}`);
 
       switch (chunk.type) {
         case 'CNTI':
         case 'OPDA':
           // Parse content info and optional data chunks
+          console.log('Parsing CNTI/OPDA chunk');
           Object.assign(metadata, this.parseCNTI(chunk));
           break;
         case 'MTR ':
         case 'Mtr ':
           // Parse music track chunk
+          console.log('Parsing MTR chunk!!!');
           const trackData = this.parseMTR(chunk);
           notes.push(...trackData.notes);
           if (trackData.tempo) tempo = trackData.tempo;
           break;
         case 'MSTR':
           // Master track - skip for now (contains global tempo/timing)
+          console.log('Skipping MSTR chunk');
           this.position = chunk.offset + chunk.size;
           break;
         case 'Atsq':
         case 'ATR ':
           // Audio track - skip for now
+          console.log('Skipping Atsq/ATR chunk');
           this.position = chunk.offset + chunk.size;
           break;
         default:
           // Skip unknown chunks
+          console.log('Skipping unknown chunk');
           this.position = chunk.offset + chunk.size;
           break;
       }
@@ -154,13 +165,17 @@ export class MMFParser {
   }
 
   private parseMTR(chunk: ChunkInfo): { notes: MMFNote[]; tempo?: number } {
+    console.log('===== parseMTR called =====');
     const notes: MMFNote[] = [];
     const endPos = chunk.offset + chunk.size;
     let currentTime = 0;
     let tempo: number | undefined;
 
+    console.log(`parseMTR: chunk.type="${chunk.type}", chunk.offset=${chunk.offset}, chunk.size=${chunk.size}, endPos=${endPos}, this.position=${this.position}`);
+
     // Check if we have at least 5 bytes for MTR header
     if (this.position + 5 > endPos) {
+      console.log('parseMTR: Not enough bytes for MTR header, returning empty');
       this.position = endPos;
       return { notes, tempo };
     }
@@ -173,15 +188,25 @@ export class MMFParser {
     const timeBaseG = this.readUInt8();
     const channelStatus = this.readUInt8();
 
+    console.log(`parseMTR: Parsed header - formatType=${formatType}, sequenceType=${sequenceType}, timeBaseD=${timeBaseD}, timeBaseG=${timeBaseG}, channelStatus=${channelStatus}`);
+    console.log(`parseMTR: After reading header, this.position=${this.position}`);
+
     // Calculate time resolution in milliseconds
     // TimeBase values represent ticks per quarter note
     // Default tempo is 120 BPM = 500ms per quarter note
     const msPerQuarterNote = 500; // 120 BPM default
     const tickDuration = timeBaseD > 0 ? msPerQuarterNote / timeBaseD : 1;
 
+    console.log(`parseMTR: tickDuration=${tickDuration} ms/tick`);
+
     // Parse sequence data
+    console.log(`parseMTR: Starting sequence data parse, position=${this.position}, endPos=${endPos}`);
+    let eventNum = 0;
     while (this.position < endPos - 1) {
+      const statusPos = this.position;
       const status = this.readUInt8();
+      eventNum++;
+      console.log(`parseMTR: Event ${eventNum} at pos=${statusPos} (0x${statusPos.toString(16)}), status=0x${status.toString(16)}`);
 
       // Note off: 0x80-0x8F
       if (status >= 0x80 && status <= 0x8F) {
@@ -189,6 +214,7 @@ export class MMFParser {
         if (this.position + 2 > endPos) break;
         const note = this.readUInt8();
         const velocity = this.readUInt8();
+        console.log(`parseMTR:   -> Note Off: channel=${channel}, note=${note}`);
         // Skip note off events - using default duration for simplicity
         continue;
       }
@@ -199,6 +225,7 @@ export class MMFParser {
         if (this.position + 2 > endPos) break;
         const note = this.readUInt8();
         const velocity = this.readUInt8();
+        console.log(`parseMTR:   -> Note On: channel=${channel}, note=${note}, velocity=${velocity}, currentTime=${currentTime}`);
         
         if (velocity > 0) {
           // Use default duration since note off tracking is not implemented
@@ -210,6 +237,7 @@ export class MMFParser {
             velocity,
             channel
           });
+          console.log(`parseMTR:   -> Added note! Total notes now: ${notes.length}`);
         }
         continue;
       }
@@ -238,6 +266,7 @@ export class MMFParser {
       if (status < 0x80) {
         const deltaTime = this.readVariableLength(status);
         currentTime += deltaTime * tickDuration;
+        console.log(`parseMTR:   -> Delta time: ${deltaTime} ticks = ${deltaTime * tickDuration} ms, currentTime now=${currentTime}`);
         continue;
       }
 
@@ -253,9 +282,11 @@ export class MMFParser {
       }
 
       // If we get here, try to skip this byte
+      console.log(`parseMTR:   -> Unknown/unhandled status`);
       if (this.position >= endPos) break;
     }
 
+    console.log(`parseMTR: Finished parsing, total notes=${notes.length}, duration will be calculated as ${notes.length > 0 ? Math.max(...notes.map(n => n.time + n.duration)) : 0}`);
     this.position = endPos;
     return { notes, tempo };
   }
