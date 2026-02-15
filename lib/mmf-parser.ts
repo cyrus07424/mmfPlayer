@@ -159,47 +159,19 @@ export class MMFParser {
     let currentTime = 0;
     let tempo: number | undefined;
 
+    // Check if we have at least 5 bytes for MTR header
+    if (this.position + 5 > endPos) {
+      this.position = endPos;
+      return { notes, tempo };
+    }
+
     // Parse MTR chunk header fields
     // These fields define the format and timing for the sequence data
-    if (this.position >= endPos) {
-      this.position = endPos;
-      return { notes, tempo };
-    }
-
-    // Format Type (1 byte) - defines the format of sequence data
     const formatType = this.readUInt8();
-    if (this.position >= endPos) {
-      this.position = endPos;
-      return { notes, tempo };
-    }
-
-    // Sequence Type (1 byte) - defines if continuous or phrase-based
     const sequenceType = this.readUInt8();
-    if (this.position >= endPos) {
-      this.position = endPos;
-      return { notes, tempo };
-    }
-
-    // TimeBase_D (1 byte) - time base for duration
     const timeBaseD = this.readUInt8();
-    if (this.position >= endPos) {
-      this.position = endPos;
-      return { notes, tempo };
-    }
-
-    // TimeBase_G (1 byte) - time base for gate time
     const timeBaseG = this.readUInt8();
-    if (this.position >= endPos) {
-      this.position = endPos;
-      return { notes, tempo };
-    }
-
-    // Channel status (1 byte)
     const channelStatus = this.readUInt8();
-    if (this.position >= endPos) {
-      this.position = endPos;
-      return { notes, tempo };
-    }
 
     // Calculate time resolution in milliseconds
     // TimeBase values represent ticks per quarter note
