@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { parseMMF, MMFData } from '@/lib/mmf-parser';
 import { MMFPlayer, PlayerState } from '@/lib/mmf-player';
+import PianoRoll from '@/components/piano-roll';
 
 export default function MMFPlayerUI() {
   const [mmfData, setMMFData] = useState<MMFData | null>(null);
@@ -276,6 +277,15 @@ export default function MMFPlayerUI() {
                 {playerState === 'stopped' && '停止'}
               </span>
             </div>
+          </div>
+
+          {/* Piano roll visualization */}
+          <div className="px-6 pb-6">
+            <PianoRoll
+              notes={mmfData.notes}
+              duration={mmfData.duration}
+              progress={progress}
+            />
           </div>
         </div>
       )}
